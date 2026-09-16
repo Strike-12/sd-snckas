@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "SDS Snackz Storefront"
+description = "A faithful rebuild of the SDS Snackz storefront with its catalog presentation, promotional content, shopping interactions, and responsive browsing experience."
+version = "1.0.0"
+id = "artifacts/sds-snackz-storefront"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 19308
+
+[services.development]
+run = "pnpm --filter @workspace/sds-snackz-storefront run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/sds-snackz-storefront", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/sds-snackz-storefront/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "19308"
+BASE_PATH = "/"
