@@ -1,0 +1,6 @@
+{
+  "name": "SDS Snackz Storefront",
+  "description": "Storefront for SDS Snackz featuring wholesale and retail snacks, candy, chocolates, chips, and beef jerky.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
