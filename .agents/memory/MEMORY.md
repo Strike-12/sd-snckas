@@ -1,2 +1,3 @@
 - [Reference extraction fallback](website-reference-extraction.md) — when automated brand extraction is unavailable, use a visual capture plus fetched HTML and locally downloaded assets.
 - [GitHub sync history](github-sync-history.md) — API-created commits can be unrelated to Replit’s local Git history; reconcile histories before normal sync.
+- [Artifact port binding](artifact-port-binding.md) — managed Vite artifacts must use injected PORT values or parallel previews collide and hang.

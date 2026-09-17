@@ -4,10 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --host 0.0.0.0 --port 3000",
+    "dev": "vite --host 0.0.0.0 --port ${PORT:-3000} --strictPort",
     "build": "vite build",
-    "serve": "vite preview --host 0.0.0.0 --port 3000",
-    "preview": "vite preview --host 0.0.0.0 --port 3000",
+    "serve": "vite preview --host 0.0.0.0 --port ${PORT:-3000} --strictPort",
+    "preview": "vite preview --host 0.0.0.0 --port ${PORT:-3000} --strictPort",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
