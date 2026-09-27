@@ -20,6 +20,7 @@ import {
   Star,
   UserRound,
   X,
+  Lock,
 } from 'lucide-react';
 import {
   ALL_PRODUCTS,
@@ -31,6 +32,7 @@ import {
 import { WholesalePortal } from './pages/WholesalePortal';
 import { buildShopifyCartUrl } from './data/shopifyVariantMap';
 import { ShopifyIntegrationModal } from './components/ShopifyIntegrationModal';
+import { ShopifyInAppCheckoutModal } from './components/ShopifyInAppCheckoutModal';
 
 type CartLine = Product & { quantity: number };
 
@@ -297,6 +299,7 @@ function CartDrawer({
   onChangeQuantity,
   onRemove,
   onOpenShopifyModal,
+  onProceedToInAppCheckout,
 }: {
   open: boolean;
   lines: CartLine[];
@@ -304,16 +307,17 @@ function CartDrawer({
   onChangeQuantity: (id: string, amount: number) => void;
   onRemove: (id: string) => void;
   onOpenShopifyModal: () => void;
+  onProceedToInAppCheckout: () => void;
 }) {
   const [checkingOut, setCheckingOut] = useState(false);
   const subtotal = lines.reduce((total, line) => total + line.rawPrice * line.quantity, 0);
 
-  const handleShopifyCheckout = () => {
+  const handleExternalShopifyCart = () => {
     if (lines.length === 0) return;
     setCheckingOut(true);
     const cartUrl = buildShopifyCartUrl(lines);
     window.open(cartUrl, '_blank', 'noopener,noreferrer');
-    setTimeout(() => setCheckingOut(false), 2000);
+    setTimeout(() => setCheckingOut(false), 1500);
   };
 
   return (
@@ -412,42 +416,69 @@ function CartDrawer({
             <button
               className="button"
               type="button"
-              onClick={handleShopifyCheckout}
-              disabled={checkingOut}
+              onClick={() => {
+                onClose();
+                onProceedToInAppCheckout();
+              }}
               data-testid="button-checkout"
               style={{
                 width: '100%',
                 display: 'flex',
+                flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: 8,
+                gap: 3,
                 background: '#047857',
                 color: '#fff',
                 fontWeight: 700,
                 fontSize: 14,
                 padding: '12px 16px',
                 borderRadius: 8,
-                cursor: checkingOut ? 'wait' : 'pointer',
+                cursor: 'pointer',
+                border: 'none',
+                boxShadow: '0 4px 12px rgba(4, 120, 87, 0.25)',
               }}
             >
-              <ShoppingBag size={16} />
-              {checkingOut ? 'Opening Shopify Checkout...' : 'Checkout on Shopify'}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                <Lock size={15} />
+                <span>Proceed to Secure In-Store Checkout</span>
+              </div>
+              <span style={{ fontSize: 11, fontWeight: 500, opacity: 0.9 }}>
+                Pay right here on-site · Order sent to Shopify
+              </span>
             </button>
-            <div style={{ textAlign: 'center', marginTop: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, fontSize: 11 }}>
               <button
                 type="button"
                 onClick={onOpenShopifyModal}
                 style={{
                   background: 'none',
                   border: 'none',
-                  color: '#64748b',
+                  color: '#047857',
                   fontSize: 11,
+                  fontWeight: 600,
                   textDecoration: 'underline',
                   cursor: 'pointer',
-                  padding: 2,
+                  padding: 0,
                 }}
               >
-                Need to install or embed storefront on Shopify? Click here ↗
+                Shopify Orders & Sync Hub
+              </button>
+              <button
+                type="button"
+                onClick={handleExternalShopifyCart}
+                disabled={checkingOut}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#64748b',
+                  fontSize: 11,
+                  textDecoration: 'none',
+                  cursor: 'pointer',
+                  padding: 0,
+                }}
+              >
+                {checkingOut ? 'Opening Cart...' : 'Or open Shopify cart link ↗'}
               </button>
             </div>
           </div>
@@ -957,6 +988,7 @@ const CRAVINGS = [
 function App() {
   const [view, setView] = useState<'retail' | 'wholesale'>('retail');
   const [cartOpen, setCartOpen] = useState(false);
+  const [inAppCheckoutOpen, setInAppCheckoutOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [shopifyModalOpen, setShopifyModalOpen] = useState(false);
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
@@ -1519,6 +1551,20 @@ function App() {
         onChangeQuantity={changeQuantity}
         onRemove={removeFromCart}
         onOpenShopifyModal={() => setShopifyModalOpen(true)}
+        onProceedToInAppCheckout={() => {
+          setCartOpen(false);
+          setInAppCheckoutOpen(true);
+        }}
+      />
+      <ShopifyInAppCheckoutModal
+        open={inAppCheckoutOpen}
+        onClose={() => setInAppCheckoutOpen(false)}
+        cartLines={cart}
+        onClearCart={() => setCart([])}
+        onOpenShopifyConfigModal={() => {
+          setInAppCheckoutOpen(false);
+          setShopifyModalOpen(true);
+        }}
       />
       <ShopifyIntegrationModal
         open={shopifyModalOpen}
