@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: shopify
+    description: Shopify storefront and checkout operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,54 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /shopify/products:
+    get:
+      operationId: listShopifyProducts
+      tags: [shopify]
+      summary: List purchasable Shopify products
+      responses:
+        "200":
+          description: Published Shopify products and their available variants
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShopifyProductCatalogResponse"
+  /shopify/checkout:
+    post:
+      operationId: createShopifyCheckout
+      tags: [shopify]
+      summary: Create a Shopify cart and hosted checkout URL
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateShopifyCheckoutRequest"
+      responses:
+        "200":
+          description: Shopify-hosted checkout URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShopifyCheckoutRedirectResponse"
+        "400":
+          description: Invalid cart lines
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: Product or variant is no longer available
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: Shopify checkout is not currently available
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +83,94 @@ components:
           type: string
       required:
         - status
+    ShopifyProductVariant:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        availableForSale:
+          type: boolean
+        priceAmount:
+          type: string
+        currencyCode:
+          type: string
+      required:
+        - id
+        - title
+        - availableForSale
+        - priceAmount
+        - currencyCode
+    ShopifyProduct:
+      type: object
+      properties:
+        handle:
+          type: string
+        title:
+          type: string
+        imageUrl:
+          type: string
+        imageAlt:
+          type: string
+        variants:
+          type: array
+          items:
+            $ref: "#/components/schemas/ShopifyProductVariant"
+      required:
+        - handle
+        - title
+        - variants
+    ShopifyProductCatalogResponse:
+      type: object
+      properties:
+        products:
+          type: array
+          items:
+            $ref: "#/components/schemas/ShopifyProduct"
+      required:
+        - products
+    ShopifyCheckoutLine:
+      type: object
+      properties:
+        handle:
+          type: string
+          minLength: 1
+        variantId:
+          type: string
+          minLength: 1
+        quantity:
+          type: integer
+          minimum: 1
+          maximum: 99
+      required:
+        - handle
+        - variantId
+        - quantity
+    CreateShopifyCheckoutRequest:
+      type: object
+      properties:
+        lines:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            $ref: "#/components/schemas/ShopifyCheckoutLine"
+      required:
+        - lines
+    ShopifyCheckoutRedirectResponse:
+      type: object
+      properties:
+        checkoutUrl:
+          type: string
+          format: uri
+      required:
+        - checkoutUrl
+    ApiError:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
 

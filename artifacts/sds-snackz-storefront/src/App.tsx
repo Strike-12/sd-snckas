@@ -4,7 +4,6 @@ import {
   Building2,
   Check,
   ChevronDown,
-  Download,
   ExternalLink,
   Eye,
   Menu,
@@ -30,11 +29,48 @@ import {
   type Product,
 } from './data/productsData';
 import { WholesalePortal } from './pages/WholesalePortal';
-import { buildShopifyCartUrl } from './data/shopifyVariantMap';
 import { ShopifyIntegrationModal } from './components/ShopifyIntegrationModal';
-import { ShopifyInAppCheckoutModal } from './components/ShopifyInAppCheckoutModal';
 
-type CartLine = Product & { quantity: number };
+type ShopifyVariant = {
+  id: string;
+  title: string;
+  availableForSale: boolean;
+  priceAmount: string;
+  currencyCode: string;
+};
+
+type ShopifyCatalogProduct = {
+  handle: string;
+  title: string;
+  imageUrl?: string;
+  imageAlt?: string;
+  variants: ShopifyVariant[];
+};
+
+type StoreProduct = Product & {
+  shopifyVariants: ShopifyVariant[];
+  shopifyCatalogReady: boolean;
+};
+
+type CartLine = StoreProduct & {
+  quantity: number;
+  shopifyVariantId: string;
+  shopifyVariantTitle: string;
+  shopifyCurrencyCode: string;
+};
+
+function formatShopifyPrice(amount: string | number, currencyCode = 'USD') {
+  const value = Number(amount);
+  if (!Number.isFinite(value)) return 'Price unavailable';
+  try {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: currencyCode,
+    }).format(value);
+  } catch {
+    return `${currencyCode} ${value.toFixed(2)}`;
+  }
+}
 
 const navItems: { label: string; slug: string | null }[] = [
   { label: 'Home', slug: null },
@@ -117,7 +153,7 @@ function Header({
             }}
             data-testid="button-open-shopify-modal"
           >
-            <Download size={11} /> Shopify Checkout / Download App
+            <Lock size={11} /> Secure Shopify checkout
           </button>
         </div>
       </div>
@@ -282,7 +318,7 @@ function Header({
                 }}
                 data-testid="link-mobile-shopify"
               >
-                <Download size={14} /> Shopify Checkout & Download
+                <Lock size={14} /> Secure Shopify checkout
               </button>
             </nav>
           ) : null}
@@ -299,7 +335,10 @@ function CartDrawer({
   onChangeQuantity,
   onRemove,
   onOpenShopifyModal,
-  onProceedToInAppCheckout,
+  onCheckout,
+  checkoutPending,
+  checkoutError,
+  checkoutFallbackUrl,
 }: {
   open: boolean;
   lines: CartLine[];
@@ -307,18 +346,12 @@ function CartDrawer({
   onChangeQuantity: (id: string, amount: number) => void;
   onRemove: (id: string) => void;
   onOpenShopifyModal: () => void;
-  onProceedToInAppCheckout: () => void;
+  onCheckout: () => void;
+  checkoutPending: boolean;
+  checkoutError: string;
+  checkoutFallbackUrl: string | null;
 }) {
-  const [checkingOut, setCheckingOut] = useState(false);
   const subtotal = lines.reduce((total, line) => total + line.rawPrice * line.quantity, 0);
-
-  const handleExternalShopifyCart = () => {
-    if (lines.length === 0) return;
-    setCheckingOut(true);
-    const cartUrl = buildShopifyCartUrl(lines);
-    window.open(cartUrl, '_blank', 'noopener,noreferrer');
-    setTimeout(() => setCheckingOut(false), 1500);
-  };
 
   return (
     <>
@@ -353,6 +386,9 @@ function CartDrawer({
                 <img src={line.image} alt={line.name} />
                 <div className="cart-item-info">
                   <strong>{line.name}</strong>
+                  {line.shopifyVariantTitle && line.shopifyVariantTitle !== 'Default Title' ? (
+                    <div style={{ fontSize: 11, color: '#64748b' }}>{line.shopifyVariantTitle}</div>
+                  ) : null}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '2px 0 4px', flexWrap: 'wrap' }}>
                     <span style={{ fontWeight: 700, color: '#0f172a' }}>{line.price}</span>
                     <span className="single-unit-badge" style={{ fontSize: 10, padding: '1px 6px' }}>
@@ -384,6 +420,7 @@ function CartDrawer({
                       type="button"
                       onClick={() => onChangeQuantity(line.id, 1)}
                       aria-label={`Increase ${line.name}`}
+                      disabled={line.quantity >= 99}
                       data-testid={`button-increase-${line.id}`}
                     >
                       <Plus size={12} />
@@ -411,15 +448,15 @@ function CartDrawer({
                   ({lines.reduce((n, l) => n + l.quantity, 0)} {lines.reduce((n, l) => n + l.quantity, 0) === 1 ? 'single item' : 'single items'})
                 </span>
               </div>
-              <span data-testid="text-cart-subtotal">${subtotal.toFixed(2)}</span>
+              <span data-testid="text-cart-subtotal">
+                {formatShopifyPrice(subtotal, lines[0]?.shopifyCurrencyCode)}
+              </span>
             </div>
             <button
               className="button"
               type="button"
-              onClick={() => {
-                onClose();
-                onProceedToInAppCheckout();
-              }}
+              onClick={onCheckout}
+              disabled={checkoutPending}
               data-testid="button-checkout"
               style={{
                 width: '100%',
@@ -437,17 +474,47 @@ function CartDrawer({
                 cursor: 'pointer',
                 border: 'none',
                 boxShadow: '0 4px 12px rgba(4, 120, 87, 0.25)',
+                opacity: checkoutPending ? 0.72 : 1,
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                 <Lock size={15} />
-                <span>Proceed to Secure In-Store Checkout</span>
+                <span>{checkoutPending ? 'Opening Shopify checkout…' : 'Continue to secure Shopify checkout'}</span>
               </div>
               <span style={{ fontSize: 11, fontWeight: 500, opacity: 0.9 }}>
-                Pay right here on-site · Order sent to Shopify
+                Payment, shipping, and tax are handled by Shopify
               </span>
             </button>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, fontSize: 11 }}>
+            {checkoutError ? (
+              <p role="alert" style={{ color: '#9f1239', fontSize: 12, lineHeight: 1.45, margin: '10px 0 0' }}>
+                {checkoutError}
+              </p>
+            ) : null}
+            {checkoutFallbackUrl ? (
+              <a
+                href={checkoutFallbackUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                data-testid="link-open-shopify-checkout"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 7,
+                  marginTop: 10,
+                  padding: '10px 12px',
+                  border: '1px solid #047857',
+                  borderRadius: 8,
+                  color: '#047857',
+                  fontSize: 13,
+                  fontWeight: 700,
+                  textDecoration: 'none',
+                }}
+              >
+                Open Shopify checkout in a new tab <ExternalLink size={15} />
+              </a>
+            ) : null}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12, fontSize: 11 }}>
               <button
                 type="button"
                 onClick={onOpenShopifyModal}
@@ -462,23 +529,7 @@ function CartDrawer({
                   padding: 0,
                 }}
               >
-                Shopify Orders & Sync Hub
-              </button>
-              <button
-                type="button"
-                onClick={handleExternalShopifyCart}
-                disabled={checkingOut}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#64748b',
-                  fontSize: 11,
-                  textDecoration: 'none',
-                  cursor: 'pointer',
-                  padding: 0,
-                }}
-              >
-                {checkingOut ? 'Opening Cart...' : 'Or open Shopify cart link ↗'}
+                About secure checkout
               </button>
             </div>
           </div>
@@ -772,11 +823,13 @@ function ProductCard({
   onAdd,
   onQuickView,
 }: {
-  product: Product;
-  onAdd: (product: Product) => void;
-  onQuickView: (product: Product) => void;
+  product: StoreProduct;
+  onAdd: (product: StoreProduct, quantity?: number, variant?: ShopifyVariant) => void;
+  onQuickView: (product: StoreProduct) => void;
 }) {
   const badge = getProductBadge(product);
+  const availableVariants = product.shopifyVariants.filter((variant) => variant.availableForSale);
+  const canPurchase = product.shopifyCatalogReady && availableVariants.length > 0;
   const packaging = getProductPackaging(product);
 
   return (
@@ -831,10 +884,21 @@ function ProductCard({
           <button
             className="add-btn"
             type="button"
-            onClick={() => onAdd(product)}
+            onClick={() => {
+              if (availableVariants.length === 1) onAdd(product, 1, availableVariants[0]);
+              else onQuickView(product);
+            }}
+            disabled={!canPurchase}
+            title={!product.shopifyCatalogReady ? 'Checking live Shopify availability' : undefined}
             data-testid={`button-add-${product.id}`}
           >
-            {packaging.addBtnLabel}
+            {!product.shopifyCatalogReady
+              ? 'Checking…'
+              : !canPurchase
+                ? 'Unavailable'
+                : availableVariants.length > 1
+                  ? 'Choose options'
+                  : packaging.addBtnLabel}
           </button>
         </div>
       </div>
@@ -848,13 +912,21 @@ function QuickViewModal({
   onAdd,
   onOpenWholesale,
 }: {
-  product: Product | null;
+  product: StoreProduct | null;
   onClose: () => void;
-  onAdd: (product: Product, quantity: number) => void;
+  onAdd: (product: StoreProduct, quantity: number, variant?: ShopifyVariant) => void;
   onOpenWholesale?: () => void;
 }) {
   const [qty, setQty] = useState(1);
+  const [selectedVariantId, setSelectedVariantId] = useState('');
+  useEffect(() => {
+    const firstAvailable = product?.shopifyVariants.find((variant) => variant.availableForSale);
+    setSelectedVariantId(firstAvailable?.id ?? '');
+    setQty(1);
+  }, [product?.id]);
   if (!product) return null;
+  const availableVariants = product.shopifyVariants.filter((variant) => variant.availableForSale);
+  const selectedVariant = availableVariants.find((variant) => variant.id === selectedVariantId);
   const packaging = getProductPackaging(product);
 
   return (
@@ -887,12 +959,38 @@ function QuickViewModal({
           {product.vendor ? <div className="product-vendor">{product.vendor}</div> : null}
           <h2 className="quickview-title">{product.name}</h2>
           <div className="quickview-price" style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-            {product.price}
+            {selectedVariant
+              ? formatShopifyPrice(selectedVariant.priceAmount, selectedVariant.currencyCode)
+              : product.price}
             {product.compareAtPrice ? (
               <span className="compare-price">{product.compareAtPrice}</span>
             ) : null}
             <span style={{ fontSize: 13, color: '#047857', fontWeight: 600 }}>/ {packaging.badgeLabel}</span>
           </div>
+          {availableVariants.length > 1 ? (
+            <label style={{ display: 'grid', gap: 5, marginTop: 12, fontSize: 12, fontWeight: 600 }}>
+              Choose an option
+              <select
+                value={selectedVariantId}
+                onChange={(event) => setSelectedVariantId(event.target.value)}
+                style={{ padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: 8 }}
+                aria-label={`Choose an option for ${product.name}`}
+              >
+                {availableVariants.map((variant) => (
+                  <option key={variant.id} value={variant.id}>
+                    {variant.title} — {formatShopifyPrice(variant.priceAmount, variant.currencyCode)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          {!product.shopifyCatalogReady || availableVariants.length === 0 ? (
+            <p role="status" style={{ color: '#9f1239', fontSize: 12 }}>
+              {!product.shopifyCatalogReady
+                ? 'Live Shopify availability is still loading.'
+                : 'This product is currently unavailable for purchase.'}
+            </p>
+          ) : null}
 
           <div
             style={{
@@ -948,8 +1046,9 @@ function QuickViewModal({
               <button
                 className="qty-btn"
                 type="button"
-                onClick={() => setQty((q) => q + 1)}
+                onClick={() => setQty((q) => Math.min(99, q + 1))}
                 aria-label="Increase quantity"
+                disabled={qty >= 99}
               >
                 <Plus size={12} />
               </button>
@@ -958,9 +1057,10 @@ function QuickViewModal({
               className="button"
               type="button"
               onClick={() => {
-                onAdd(product, qty);
+                if (selectedVariant) onAdd(product, qty, selectedVariant);
                 onClose();
               }}
+              disabled={!selectedVariant}
               style={{ flex: 1 }}
             >
               Add {qty} {qty === 1 ? packaging.unitSingular.charAt(0).toUpperCase() + packaging.unitSingular.slice(1) : packaging.unitPlural.charAt(0).toUpperCase() + packaging.unitPlural.slice(1)} to cart
@@ -1003,23 +1103,25 @@ function SearchPanel({
   onClose,
   onSelectProduct,
   onAdd,
+  products,
 }: {
   open: boolean;
   onClose: () => void;
-  onSelectProduct: (product: Product) => void;
-  onAdd: (product: Product) => void;
+  onSelectProduct: (product: StoreProduct) => void;
+  onAdd: (product: StoreProduct) => void;
+  products: StoreProduct[];
 }) {
   const [query, setQuery] = useState('');
   const matches = useMemo(() => {
     if (!query.trim()) return [];
     const q = query.toLowerCase();
-    return ALL_PRODUCTS.filter(
+    return products.filter(
       (product) =>
         product.name.toLowerCase().includes(q) ||
         (product.vendor && product.vendor.toLowerCase().includes(q)) ||
         (product.categoryName && product.categoryName.toLowerCase().includes(q))
     ).slice(0, 10);
-  }, [query]);
+  }, [query, products]);
 
   return (
     <>
@@ -1081,9 +1183,19 @@ function SearchPanel({
                     className="add-btn"
                     type="button"
                     onClick={() => onAdd(product)}
+                    disabled={
+                      !product.shopifyCatalogReady ||
+                      !product.shopifyVariants.some((variant) => variant.availableForSale)
+                    }
                     style={{ padding: '6px 10px', fontSize: 10 }}
                   >
-                    Add
+                    {!product.shopifyCatalogReady
+                      ? 'Checking…'
+                      : product.shopifyVariants.some((variant) => variant.availableForSale)
+                        ? product.shopifyVariants.filter((variant) => variant.availableForSale).length > 1
+                          ? 'Choose'
+                          : 'Add'
+                        : 'Unavailable'}
                   </button>
                 </div>
               ))
@@ -1241,13 +1353,51 @@ const CRAVINGS = [
 function App() {
   const [view, setView] = useState<'retail' | 'wholesale'>('retail');
   const [cartOpen, setCartOpen] = useState(false);
-  const [inAppCheckoutOpen, setInAppCheckoutOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [shopifyModalOpen, setShopifyModalOpen] = useState(false);
-  const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
+  const [quickViewProduct, setQuickViewProduct] = useState<StoreProduct | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [activeCraving, setActiveCraving] = useState<string>('all');
   const [cart, setCart] = useState<CartLine[]>([]);
+  const [shopifyCatalog, setShopifyCatalog] = useState<ShopifyCatalogProduct[]>([]);
+  const [catalogState, setCatalogState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [catalogError, setCatalogError] = useState('');
+  const [catalogRetry, setCatalogRetry] = useState(0);
+  const [checkoutPending, setCheckoutPending] = useState(false);
+  const [checkoutError, setCheckoutError] = useState('');
+  const [checkoutFallbackUrl, setCheckoutFallbackUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setCatalogState('loading');
+    setCatalogError('');
+    fetch('/api/shopify/products', { signal: controller.signal })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(
+            typeof payload.error === 'string'
+              ? payload.error
+              : 'Live Shopify products could not be loaded.',
+          );
+        }
+        if (!Array.isArray(payload.products)) {
+          throw new Error('Shopify returned an invalid product catalog.');
+        }
+        return payload.products as ShopifyCatalogProduct[];
+      })
+      .then((products) => {
+        setShopifyCatalog(products);
+        setCatalogState('ready');
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        setCatalogError(error instanceof Error ? error.message : 'Shopify products could not be loaded.');
+        setCatalogState('error');
+      });
+
+    return () => controller.abort();
+  }, [catalogRetry]);
 
   // Sync view state with URL hash
   useEffect(() => {
@@ -1269,29 +1419,177 @@ function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const shopifyProductsByHandle = useMemo(
+    () => new Map(shopifyCatalog.map((product) => [product.handle, product])),
+    [shopifyCatalog],
+  );
+
+  const allStoreProducts = useMemo(
+    () =>
+      ALL_PRODUCTS.map((product): StoreProduct => {
+        const liveProduct = shopifyProductsByHandle.get(product.handle);
+        const variants = liveProduct?.variants ?? [];
+        const lowestPricedVariant = [...variants]
+          .filter((variant) => Number.isFinite(Number(variant.priceAmount)))
+          .sort((a, b) => Number(a.priceAmount) - Number(b.priceAmount))[0];
+        return {
+          ...product,
+          name: liveProduct?.title ?? product.name,
+          image: liveProduct?.imageUrl || product.image,
+          price: lowestPricedVariant
+            ? formatShopifyPrice(lowestPricedVariant.priceAmount, lowestPricedVariant.currencyCode)
+            : product.price,
+          rawPrice: lowestPricedVariant ? Number(lowestPricedVariant.priceAmount) : product.rawPrice,
+          compareAtPrice: liveProduct ? undefined : product.compareAtPrice,
+          available: variants.some((variant) => variant.availableForSale),
+          shopifyVariants: variants,
+          shopifyCatalogReady: catalogState === 'ready',
+        };
+      }),
+    [shopifyProductsByHandle, catalogState],
+  );
+  const storeProductsByHandle = useMemo(
+    () => new Map(allStoreProducts.map((product) => [product.handle, product])),
+    [allStoreProducts],
+  );
+  const verifiedStoreProducts = useMemo(
+    () =>
+      catalogState === 'ready'
+        ? allStoreProducts.filter((product) =>
+            product.shopifyVariants.some((variant) => variant.availableForSale),
+          )
+        : allStoreProducts,
+    [allStoreProducts, catalogState],
+  );
+
   const cartCount = cart.reduce((total, line) => total + line.quantity, 0);
 
-  const addToCart = (product: Product, quantity = 1) => {
+  const addToCart = (product: StoreProduct, quantity = 1, requestedVariant?: ShopifyVariant) => {
+    const availableVariants = product.shopifyVariants.filter((variant) => variant.availableForSale);
+    const variant = requestedVariant ??
+      (availableVariants.length === 1 ? availableVariants[0] : undefined);
+    if (!product.shopifyCatalogReady || availableVariants.length === 0) return;
+    if (!variant) {
+      setQuickViewProduct(product);
+      return;
+    }
+
+    const rawPrice = Number(variant.priceAmount);
+    if (!Number.isFinite(rawPrice)) {
+      setCheckoutError('Shopify did not return a valid price for this item.');
+      return;
+    }
+    const quantityToAdd = Math.max(1, Math.min(99, quantity));
+    const cartLine: CartLine = {
+      ...product,
+      id: variant.id,
+      price: formatShopifyPrice(variant.priceAmount, variant.currencyCode),
+      rawPrice,
+      compareAtPrice: undefined,
+      shopifyVariantId: variant.id,
+      shopifyVariantTitle: variant.title,
+      shopifyCurrencyCode: variant.currencyCode,
+      quantity: quantityToAdd,
+    };
+
+    setCheckoutFallbackUrl(null);
     setCart((current) => {
-      const existing = current.find((line) => line.id === product.id);
+      const existing = current.find((line) => line.shopifyVariantId === variant.id);
       return existing
         ? current.map((line) =>
-            line.id === product.id ? { ...line, quantity: line.quantity + quantity } : line
+            line.shopifyVariantId === variant.id
+              ? { ...line, quantity: Math.min(99, line.quantity + quantityToAdd) }
+              : line
           )
-        : [...current, { ...product, quantity }];
+        : [...current, cartLine];
     });
+    setCheckoutError('');
     setCartOpen(true);
   };
 
-  const changeQuantity = (id: string, amount: number) =>
+  const changeQuantity = (id: string, amount: number) => {
+    setCheckoutFallbackUrl(null);
+    setCheckoutError('');
     setCart((current) =>
       current
-        .map((line) => (line.id === id ? { ...line, quantity: line.quantity + amount } : line))
+        .map((line) => (
+          line.id === id
+            ? { ...line, quantity: Math.max(0, Math.min(99, line.quantity + amount)) }
+            : line
+        ))
         .filter((line) => line.quantity > 0)
     );
+  };
 
-  const removeFromCart = (id: string) =>
+  const removeFromCart = (id: string) => {
+    setCheckoutFallbackUrl(null);
+    setCheckoutError('');
     setCart((current) => current.filter((line) => line.id !== id));
+  };
+
+  const startShopifyCheckout = async () => {
+    setCheckoutError('');
+    setCheckoutFallbackUrl(null);
+    if (catalogState !== 'ready') {
+      setCheckoutError('Live Shopify products are not available yet. Please try again shortly.');
+      return;
+    }
+    if (cart.length === 0) return;
+    if (cart.length > 50 || cart.some((line) => line.quantity > 99)) {
+      setCheckoutError('Shopify checkout supports up to 50 items and 99 of each item per cart.');
+      return;
+    }
+
+    // Open the tab synchronously from the button click so popup blockers allow
+    // the later navigation after the checkout URL request completes.
+    const checkoutWindow = window.open('about:blank', '_blank');
+    if (checkoutWindow) checkoutWindow.opener = null;
+    setCheckoutPending(true);
+    try {
+      const response = await fetch('/api/shopify/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lines: cart.map((line) => ({
+            handle: line.handle,
+            variantId: line.shopifyVariantId,
+            quantity: line.quantity,
+          })),
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(
+          typeof payload.error === 'string'
+            ? payload.error
+            : 'Secure Shopify checkout could not be started.',
+        );
+      }
+      if (typeof payload.checkoutUrl !== 'string') {
+        throw new Error('Shopify did not return a checkout link.');
+      }
+      const checkoutUrl = new URL(payload.checkoutUrl);
+      if (
+        checkoutUrl.protocol !== 'https:' ||
+        checkoutUrl.hostname !== 'www.sdsnackz.com' ||
+        !checkoutUrl.pathname.startsWith('/cart/')
+      ) {
+        throw new Error('Shopify returned an invalid checkout link.');
+      }
+      if (checkoutWindow && !checkoutWindow.closed) {
+        checkoutWindow.location.replace(checkoutUrl.toString());
+      } else {
+        setCheckoutFallbackUrl(checkoutUrl.toString());
+        setCheckoutError('Your browser blocked the new tab. Use the link below to open Shopify checkout.');
+      }
+      setCheckoutPending(false);
+    } catch (error) {
+      if (checkoutWindow && !checkoutWindow.closed) checkoutWindow.close();
+      setCheckoutError(error instanceof Error ? error.message : 'Secure Shopify checkout could not be started.');
+      setCheckoutPending(false);
+      setCheckoutFallbackUrl(null);
+    }
+  };
 
   const handleSelectCategory = (slug: string | null) => {
     setSelectedCategory(slug);
@@ -1372,6 +1670,23 @@ function App() {
     return PRODUCTS_BY_COLLECTION[selectedCategory] || [];
   }, [selectedCategory, activeCraving]);
 
+  const currentStoreProducts = useMemo(
+    () =>
+      currentProducts
+        .map((product) =>
+        storeProductsByHandle.get(product.handle) ?? {
+          ...product,
+          shopifyVariants: [],
+          shopifyCatalogReady: catalogState === 'ready',
+        },
+        )
+        .filter((product) =>
+          catalogState !== 'ready' ||
+          product.shopifyVariants.some((variant) => variant.availableForSale),
+        ),
+    [currentProducts, storeProductsByHandle, catalogState],
+  );
+
   const activeCategoryObj = useMemo(() => {
     if (activeCraving !== 'all') {
       const cravingObj = CRAVINGS.find((c) => c.id === activeCraving);
@@ -1379,7 +1694,7 @@ function App() {
         slug: activeCraving,
         name: cravingObj ? `${cravingObj.icon} ${cravingObj.label}` : 'Craving Selection',
         image: '',
-        productCount: currentProducts.length,
+        productCount: currentStoreProducts.length,
       };
     }
     if (!selectedCategory) return null;
@@ -1389,9 +1704,12 @@ function App() {
         navItems.find((n) => n.slug === selectedCategory)?.label ||
         selectedCategory.replace('all-', '').replace('-', ' ').toUpperCase(),
       image: '',
-      productCount: currentProducts.length,
+      productCount: currentStoreProducts.length,
     };
-  }, [selectedCategory, activeCraving, currentProducts]);
+  }, [selectedCategory, activeCraving, currentStoreProducts]);
+  const purchasableProductCount = allStoreProducts.filter((product) =>
+    product.shopifyVariants.some((variant) => variant.availableForSale),
+  ).length;
 
   // If in Wholesale mode, render the dedicated B2B Wholesale Portal
   if (view === 'wholesale') {
@@ -1447,12 +1765,38 @@ function App() {
           </div>
         </div>
       </div>
+      {catalogState === 'loading' ? (
+        <div role="status" style={{ padding: '10px 16px', textAlign: 'center', fontSize: 12, color: '#475569' }}>
+          Checking live Shopify prices and availability…
+        </div>
+      ) : null}
+      {catalogState === 'error' ? (
+        <div role="alert" style={{ padding: '10px 16px', textAlign: 'center', fontSize: 12, color: '#9f1239' }}>
+          {catalogError} Checkout is disabled until live products can be verified.{' '}
+          <button
+            type="button"
+            onClick={() => setCatalogRetry((attempt) => attempt + 1)}
+            style={{ color: 'inherit', fontWeight: 700, textDecoration: 'underline', background: 'none', border: 0, cursor: 'pointer' }}
+          >
+            Retry
+          </button>
+        </div>
+      ) : null}
+      {catalogState === 'ready' && purchasableProductCount === 0 ? (
+        <div role="alert" style={{ padding: '10px 16px', textAlign: 'center', fontSize: 12, color: '#9f1239' }}>
+          {shopifyCatalog.length === 0
+            ? 'The Shopify store has no products published for checkout.'
+            : 'No products in this storefront match a purchasable Shopify variant.'}{' '}
+          Verify that products are published to the Online Store sales channel.
+        </div>
+      ) : null}
 
       <SearchPanel
         open={searchOpen}
         onClose={() => setSearchOpen(false)}
         onSelectProduct={(p) => setQuickViewProduct(p)}
         onAdd={addToCart}
+        products={verifiedStoreProducts}
       />
       <QuickViewModal
         product={quickViewProduct}
@@ -1574,8 +1918,8 @@ function App() {
               </h2>
               <p className="section-note">
                 {activeCategoryObj
-                  ? `Showing all ${currentProducts.length} authentic snacks in this collection.`
-                  : `Showing all ${ALL_PRODUCTS.length} authentic snacks in our catalog. Pick a brand category above or explore all snacks below.`}
+                  ? `Showing ${currentStoreProducts.length} products from the live Shopify catalog in this collection.`
+                  : 'The snacks that disappear first. Pick a category above or choose from favorites below.'}
               </p>
             </div>
             <a className="text-link" href="#categories" data-testid="link-view-categories">
@@ -1616,7 +1960,7 @@ function App() {
             <div className="active-filter-banner">
               <div className="active-filter-text">
                 Filtering by <strong>{activeCategoryObj.name}</strong> ·{' '}
-                <span>{currentProducts.length} items available</span>
+                <span>{currentStoreProducts.filter((product) => product.shopifyVariants.some((variant) => variant.availableForSale)).length} items available</span>
               </div>
               <button
                 type="button"
@@ -1649,7 +1993,7 @@ function App() {
 
           {/* Product Grid */}
           <div className="product-grid">
-            {currentProducts.map((product) => (
+            {currentStoreProducts.map((product) => (
               <ProductCard
                 product={product}
                 onAdd={addToCart}
@@ -1659,9 +2003,11 @@ function App() {
             ))}
           </div>
 
-          {currentProducts.length === 0 ? (
+          {currentStoreProducts.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '60px 20px', color: '#788580' }}>
-              No items found in this collection. Try picking another craving or category above!
+              {catalogState === 'ready'
+                ? 'No purchasable Shopify products are available in this collection right now.'
+                : 'No items found in this collection. Try picking another craving or category above!'}
             </div>
           ) : null}
         </section>
@@ -1774,7 +2120,7 @@ function App() {
               }}
               data-testid="link-footer-shopify"
             >
-              🔗 Connect to Shopify / Download App
+              🔒 Checkout securely with Shopify
             </button>
             <a href="#contact" data-testid="link-footer-contact">
               Contact
@@ -1809,20 +2155,10 @@ function App() {
         onChangeQuantity={changeQuantity}
         onRemove={removeFromCart}
         onOpenShopifyModal={() => setShopifyModalOpen(true)}
-        onProceedToInAppCheckout={() => {
-          setCartOpen(false);
-          setInAppCheckoutOpen(true);
-        }}
-      />
-      <ShopifyInAppCheckoutModal
-        open={inAppCheckoutOpen}
-        onClose={() => setInAppCheckoutOpen(false)}
-        cartLines={cart}
-        onClearCart={() => setCart([])}
-        onOpenShopifyConfigModal={() => {
-          setInAppCheckoutOpen(false);
-          setShopifyModalOpen(true);
-        }}
+        onCheckout={startShopifyCheckout}
+        checkoutPending={checkoutPending}
+        checkoutError={checkoutError}
+        checkoutFallbackUrl={checkoutFallbackUrl}
       />
       <ShopifyIntegrationModal
         open={shopifyModalOpen}
