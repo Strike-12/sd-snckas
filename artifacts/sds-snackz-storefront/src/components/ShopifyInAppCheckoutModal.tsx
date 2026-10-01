@@ -1,4 +1,4 @@
-import React, { useState, useId } from 'react';
+import React, { useState, useId, useEffect } from 'react';
 import {
   X,
   ShieldCheck,
@@ -19,7 +19,9 @@ import type { Product } from '../data/productsData';
 import {
   processInAppShopifyOrder,
   type ShopifyOrderRecord,
+  type ShopifyPaymentMethodType,
 } from '../services/shopifyOrderService';
+import { getStoredAccount } from '../services/accountService';
 
 interface ShopifyInAppCheckoutModalProps {
   open: boolean;
@@ -53,13 +55,32 @@ export function ShopifyInAppCheckoutModal({
   // Shipping Method
   const [shippingMethod, setShippingMethod] = useState<'standard' | 'priority' | 'overnight'>('standard');
 
-  // Payment State (In-Store On-Site)
-  const [paymentMethod, setPaymentMethod] = useState<'card' | 'shoppay' | 'applepay'>('card');
+  // Payment State (All Official Shopify Payment Options)
+  const [paymentMethod, setPaymentMethod] = useState<ShopifyPaymentMethodType>('card');
   const [cardNumber, setCardNumber] = useState('');
   const [cardExpiry, setCardExpiry] = useState('');
   const [cardCvv, setCardCvv] = useState('');
   const [cardName, setCardName] = useState('');
   const [sameBilling, setSameBilling] = useState(true);
+
+  // Shop Pay sub-options
+  const [shoppayPhone, setShoppayPhone] = useState('');
+  const [shoppayUseInstallments, setShoppayUseInstallments] = useState(false);
+
+  // PayPal sub-options
+  const [paypalOption, setPaypalOption] = useState<'standard' | 'payin4'>('standard');
+
+  // Klarna sub-options
+  const [klarnaOption, setKlarnaOption] = useState<'payin4' | 'payin30'>('payin4');
+
+  // Afterpay sub-options
+  const [afterpayOption, setAfterpayOption] = useState<'payin4'>('payin4');
+
+  // Affirm sub-options
+  const [affirmTerm, setAffirmTerm] = useState<'3' | '6' | '12'>('3');
+
+  // Manual payment sub-options
+  const [manualOption, setManualOption] = useState<'zelle' | 'cod' | 'dock_willcall'>('zelle');
 
   // Discount / Promo Code
   const [discountCodeInput, setDiscountCodeInput] = useState('');
@@ -74,6 +95,28 @@ export function ShopifyInAppCheckoutModal({
   const [processingStatus, setProcessingStatus] = useState('Securing connection...');
   const [completedOrder, setCompletedOrder] = useState<ShopifyOrderRecord | null>(null);
   const [validationError, setValidationError] = useState('');
+
+  // Pre-fill contact details from saved account if available
+  useEffect(() => {
+    if (open) {
+      const acc = getStoredAccount();
+      if (acc) {
+        if (!email && acc.email) setEmail(acc.email);
+        if (!phone && acc.phone) setPhone(acc.phone);
+        if (!firstName && acc.fullName) {
+          const parts = acc.fullName.split(' ');
+          setFirstName(parts[0] || '');
+          setLastName(parts.slice(1).join(' ') || '');
+        }
+        if (acc.address && !address1) {
+          setAddress1(acc.address.address1);
+          setCity(acc.address.city);
+          setProvince(acc.address.province);
+          setZip(acc.address.zip);
+        }
+      }
+    }
+  }, [open]);
 
   const emailInputId = useId();
   const phoneInputId = useId();
@@ -94,28 +137,29 @@ export function ShopifyInAppCheckoutModal({
   // Subtotal computation
   const subtotal = cartLines.reduce((acc, item) => acc + item.rawPrice * item.quantity, 0);
 
-  // Shipping cost
-  const isFreeStandard = subtotal >= 50 || appliedDiscount?.code === 'FREESHIP';
+  // USPS Shipping: Free standard ground for all orders above $60
+  const isFreeStandard = subtotal >= 60 || appliedDiscount?.code === 'FREESHIP';
   let shippingPrice = 4.99;
-  let shippingTitle = 'Standard Ground (3-5 Business Days)';
+  let shippingTitle = 'USPS Ground Advantage (2–5 Business Days)';
 
   if (shippingMethod === 'standard') {
     shippingPrice = isFreeStandard ? 0 : 4.99;
-    shippingTitle = isFreeStandard ? 'Free Standard Ground (3-5 Days)' : 'Standard Ground (3-5 Days)';
+    shippingTitle = isFreeStandard ? 'USPS Ground Advantage (Free $60+ · 2–5 Days)' : 'USPS Ground Advantage (2–5 Days)';
   } else if (shippingMethod === 'priority') {
     shippingPrice = 8.99;
-    shippingTitle = 'Expedited Priority (2-3 Business Days)';
+    shippingTitle = 'USPS Priority Mail (1–3 Business Days)';
   } else if (shippingMethod === 'overnight') {
-    shippingPrice = 18.99;
-    shippingTitle = 'Overnight Express (1 Business Day)';
+    shippingPrice = 24.99;
+    shippingTitle = 'USPS Priority Mail Express (1–2 Days Guaranteed)';
   }
 
   // Discount calculation
   const discountAmount = appliedDiscount?.amount || 0;
   const taxableSubtotal = Math.max(0, subtotal - discountAmount);
-  // Standard California snack sales tax 7.75%
-  const estimatedTax = Number((taxableSubtotal * 0.0775).toFixed(2));
+  // Sales tax removed per store policy ($0.00 / Tax Exempt)
+  const estimatedTax = 0;
   const finalTotal = Number((taxableSubtotal + estimatedTax + shippingPrice).toFixed(2));
+  const installment4 = (finalTotal / 4).toFixed(2);
 
   // Handle Discount Application
   const handleApplyDiscount = (e?: React.FormEvent) => {
@@ -609,8 +653,8 @@ export function ShopifyInAppCheckoutModal({
                     <span>{completedOrder.shippingTotal === 0 ? 'FREE' : `$${completedOrder.shippingTotal.toFixed(2)}`}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b' }}>
-                    <span>Sales Tax (7.75%):</span>
-                    <span>${completedOrder.tax.toFixed(2)}</span>
+                    <span>Sales Tax:</span>
+                    <span style={{ color: '#047857', fontWeight: 600 }}>$0.00 (Tax Free)</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, fontSize: 14, color: '#0f172a', borderTop: '1px solid #e2e8f0', paddingTop: 6, marginTop: 4 }}>
                     <span>Total Paid:</span>
@@ -717,9 +761,9 @@ export function ShopifyInAppCheckoutModal({
                 {/* Express 1-Click Pay Buttons */}
                 <div>
                   <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 8 }}>
-                    Express In-Store Checkout
+                    Express 1-Click Checkout
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                     <button
                       type="button"
                       onClick={() => {
@@ -727,7 +771,7 @@ export function ShopifyInAppCheckoutModal({
                         setCardNumber('4242 4242 4242 4242');
                         setCardExpiry('12/28');
                         setCardCvv('123');
-                        setCardName('Shop Pay User');
+                        setCardName('Shop Pay Customer');
                       }}
                       style={{
                         background: '#5a31f4',
@@ -741,12 +785,38 @@ export function ShopifyInAppCheckoutModal({
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        gap: 6,
+                        gap: 4,
                         boxShadow: '0 2px 4px rgba(90, 49, 244, 0.2)',
                       }}
                     >
-                      <span>Shop</span>
+                      <span style={{ fontWeight: 800 }}>Shop</span>
                       <span style={{ fontWeight: 400, opacity: 0.9 }}>Pay</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPaymentMethod('paypal');
+                        setCardNumber('');
+                      }}
+                      style={{
+                        background: '#ffc439',
+                        color: '#003087',
+                        border: 'none',
+                        borderRadius: 8,
+                        padding: '10px 14px',
+                        fontSize: 13,
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 4,
+                        boxShadow: '0 2px 4px rgba(255, 196, 57, 0.3)',
+                      }}
+                    >
+                      <span style={{ color: '#003087', fontStyle: 'italic', fontWeight: 900 }}>Pay</span>
+                      <span style={{ color: '#0079c1', fontStyle: 'italic', fontWeight: 900 }}>Pal</span>
                     </button>
 
                     <button
@@ -756,7 +826,7 @@ export function ShopifyInAppCheckoutModal({
                         setCardNumber('4000 1234 5678 9010');
                         setCardExpiry('08/29');
                         setCardCvv('456');
-                        setCardName('Digital Wallet User');
+                        setCardName('Apple Pay Customer');
                       }}
                       style={{
                         background: '#000000',
@@ -773,7 +843,36 @@ export function ShopifyInAppCheckoutModal({
                         gap: 6,
                       }}
                     >
-                      <span> Apple Pay / GPay</span>
+                      <span> Apple Pay</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPaymentMethod('googlepay');
+                        setCardNumber('4111 2222 3333 4444');
+                        setCardExpiry('10/28');
+                        setCardCvv('789');
+                        setCardName('Google Pay Customer');
+                      }}
+                      style={{
+                        background: '#ffffff',
+                        color: '#3c4043',
+                        border: '1px solid #dadce0',
+                        borderRadius: 8,
+                        padding: '10px 14px',
+                        fontSize: 13,
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 4,
+                        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08)',
+                      }}
+                    >
+                      <span style={{ fontWeight: 800 }}>G</span>
+                      <span style={{ fontWeight: 600 }}>Pay</span>
                     </button>
                   </div>
                   <div
@@ -789,7 +888,7 @@ export function ShopifyInAppCheckoutModal({
                     }}
                   >
                     <div style={{ flex: 1, height: 1, background: '#e2e8f0' }} />
-                    <span>Or pay with credit card on-site</span>
+                    <span>Or enter details & choose payment option below</span>
                     <div style={{ flex: 1, height: 1, background: '#e2e8f0' }} />
                   </div>
                 </div>

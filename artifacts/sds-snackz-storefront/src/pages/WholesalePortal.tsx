@@ -1,4 +1,4 @@
-import { useState, useMemo, type FormEvent } from 'react';
+import { useState, useMemo, useRef, type FormEvent } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
@@ -6,6 +6,7 @@ import {
   Building2,
   Check,
   CheckCircle2,
+  ChevronLeft,
   ChevronRight,
   Eye,
   FileSpreadsheet,
@@ -161,7 +162,7 @@ export function WholesalePortal({ onBackToRetail }: { onBackToRetail: () => void
   }, [orderLines, itemMap]);
 
   const estGrossProfit = Math.max(0, estRetailValue - subtotal);
-  const minOrderMet = subtotal >= 350 || totalCases >= 5;
+  const minOrderMet = totalCases >= 1;
 
   const handleAppSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -171,6 +172,20 @@ export function WholesalePortal({ onBackToRetail }: { onBackToRetail: () => void
   const handleOrderSubmit = (e: FormEvent) => {
     e.preventDefault();
     setOrderSubmitted(true);
+  };
+
+  const categoryBarRef = useRef<HTMLDivElement>(null);
+
+  const scrollCategories = (offset: number) => {
+    if (categoryBarRef.current) {
+      categoryBarRef.current.scrollBy({ left: offset, behavior: 'smooth' });
+    }
+  };
+
+  const handleCategoryWheel = (e: React.WheelEvent) => {
+    if (categoryBarRef.current && Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+      categoryBarRef.current.scrollLeft += e.deltaY;
+    }
   };
 
   // Check if current category has multi-flavor matrix available
@@ -195,7 +210,7 @@ export function WholesalePortal({ onBackToRetail }: { onBackToRetail: () => void
             <span>B2B Commercial Store Supply</span>
           </div>
           <p className="ws-top-text">
-            For Convenience Stores, Bodegas, Gas Stations, Vending & Distributors · Minimum Order: $350 / 5 Master Cases
+            For Convenience Stores, Bodegas, Gas Stations, Vending & Distributors · No Minimum Order Required · Order Any Quantity
           </p>
           <button
             type="button"
@@ -223,8 +238,8 @@ export function WholesalePortal({ onBackToRetail }: { onBackToRetail: () => void
 
           <div className="ws-header-actions">
             <div className="ws-header-stat">
-              <span className="ws-stat-label">Min. Order Value</span>
-              <span className="ws-stat-val">$350.00</span>
+              <span className="ws-stat-label">Min. Order</span>
+              <span className="ws-stat-val">None (No MOQ)</span>
             </div>
             <div className="ws-header-stat">
               <span className="ws-stat-label">Active SKUs</span>
@@ -309,8 +324,8 @@ export function WholesalePortal({ onBackToRetail }: { onBackToRetail: () => void
                   <div className="ws-metric-label">Avg. Retailer Profit Margin</div>
                 </div>
                 <div>
-                  <div className="ws-metric-num">$350</div>
-                  <div className="ws-metric-label">Low Commercial MOQ</div>
+                  <div className="ws-metric-num">No MOQ</div>
+                  <div className="ws-metric-label">Buy Any Quantity · 1 Case to Pallets</div>
                 </div>
               </div>
 
@@ -354,12 +369,8 @@ export function WholesalePortal({ onBackToRetail }: { onBackToRetail: () => void
               <span className="ws-sticky-profit">+${estGrossProfit.toFixed(2)}</span>
             </div>
             <div className="ws-sticky-col">
-              <span className="ws-sticky-label">Min. Order Status:</span>
-              {minOrderMet ? (
-                <span className="ws-status-met">✓ MOQ Met ($350+)</span>
-              ) : (
-                <span className="ws-status-unmet">Add ${(350 - subtotal).toFixed(2)} more for MOQ</span>
-              )}
+              <span className="ws-sticky-label">Order Status:</span>
+              <span className="ws-status-met">✓ No MOQ · Ready to Order</span>
             </div>
             <button
               type="button"
@@ -381,45 +392,95 @@ export function WholesalePortal({ onBackToRetail }: { onBackToRetail: () => void
               <div className="ws-badge-section">Master Case & Pallet Inventory</div>
               <h2 className="ws-section-title">Wholesale Product & Packaging Catalog</h2>
               <p className="ws-section-desc">
-                Browse all 175 authentic bags. Select your preferred packaging option (12-pack display caddy, 24-pack master carton, or floor pallet) for each flavor.
+                Browse all {ALL_WHOLESALE_ITEMS.length} wholesale catalog items. Select your preferred packaging option (display caddy, master carton, or floor pallet) with exact case counts from 70wholesale.com.
               </p>
             </div>
 
-            <div className="ws-search-box">
-              <Search size={17} color="#6b7c79" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search 175 bags by flavor, SKU, brand..."
-                aria-label="Search wholesale items"
-                data-testid="input-search-wholesale"
-              />
-              {searchQuery ? (
-                <button type="button" onClick={() => setSearchQuery('')} aria-label="Clear search">
-                  <X size={15} />
-                </button>
-              ) : null}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <select
+                value={selectedCategory}
+                onChange={(e) => {
+                  setSelectedCategory(e.target.value);
+                }}
+                className="ws-category-dropdown"
+                aria-label="Jump to brand or category"
+                data-testid="select-wholesale-brand-dropdown"
+              >
+                <option value="All Cases">All Categories ({ALL_WHOLESALE_ITEMS.length} items)</option>
+                {WHOLESALE_CATEGORIES.filter((c) => c !== 'All Cases').map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat} ({categoryCounts[cat] || 0} items)
+                  </option>
+                ))}
+              </select>
+
+              <div className="ws-search-box">
+                <Search size={17} color="#6b7c79" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder={`Search ${ALL_WHOLESALE_ITEMS.length} wholesale cases...`}
+                  aria-label="Search wholesale items"
+                  data-testid="input-search-wholesale"
+                />
+                {searchQuery ? (
+                  <button type="button" onClick={() => setSearchQuery('')} aria-label="Clear search">
+                    <X size={15} />
+                  </button>
+                ) : null}
+              </div>
             </div>
           </div>
 
-          {/* Category Tabs */}
-          <div className="ws-category-bar">
-            {WHOLESALE_CATEGORIES.map((cat) => {
-              const count = categoryCounts[cat] || 0;
-              return (
-                <button
-                  type="button"
-                  key={cat}
-                  className={`ws-cat-pill ${selectedCategory === cat ? 'active' : ''}`}
-                  onClick={() => setSelectedCategory(cat)}
-                  data-testid={`button-ws-cat-${cat.toLowerCase().replace(/[^a-z0-9]/g, '-')}`}
-                >
-                  <span>{cat}</span>
-                  <span className="ws-cat-badge">{count}</span>
-                </button>
-              );
-            })}
+          {/* Category Tabs with Scroll Arrows & Full Brand Visibility */}
+          <div className="ws-category-bar-wrapper">
+            <button
+              type="button"
+              className="ws-scroll-arrow left"
+              onClick={() => scrollCategories(-280)}
+              aria-label="Scroll brands left"
+              title="Scroll brands left"
+              data-testid="button-ws-scroll-left"
+            >
+              <ChevronLeft size={18} />
+            </button>
+
+            <div
+              className="ws-category-bar"
+              ref={categoryBarRef}
+              onWheel={handleCategoryWheel}
+            >
+              {WHOLESALE_CATEGORIES.map((cat) => {
+                const count = categoryCounts[cat] || 0;
+                return (
+                  <button
+                    type="button"
+                    key={cat}
+                    className={`ws-cat-pill ${selectedCategory === cat ? 'active' : ''}`}
+                    onClick={(e) => {
+                      setSelectedCategory(cat);
+                      e.currentTarget.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+                    }}
+                    data-testid={`button-ws-cat-${cat.toLowerCase().replace(/[^a-z0-9]/g, '-')}`}
+                  >
+                    <span>{cat}</span>
+                    <span className="ws-cat-badge">{count}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <button
+              type="button"
+              className="ws-scroll-arrow right"
+              onClick={() => scrollCategories(280)}
+              aria-label="Scroll brands right"
+              title="Scroll right to see more brands"
+              data-testid="button-ws-scroll-right"
+            >
+              <ChevronRight size={18} />
+            </button>
           </div>
 
           {/* Multi-Flavor Fast Order Banner (When a specific brand is selected) */}
@@ -434,7 +495,7 @@ export function WholesalePortal({ onBackToRetail }: { onBackToRetail: () => void
                     Stocking up on {currentCategoryObj.name}?
                   </div>
                   <div className="ws-matrix-desc">
-                    View all {categoryCounts[currentCategoryObj.name] || 'available'} flavor bags side-by-side with individual photos and order all varieties simultaneously.
+                    View all {categoryCounts[currentCategoryObj.name] || 'available'} varieties side-by-side with individual photos and order all varieties simultaneously.
                   </div>
                 </div>
               </div>
@@ -462,14 +523,16 @@ export function WholesalePortal({ onBackToRetail }: { onBackToRetail: () => void
                 <article className="ws-card" key={item.id} data-testid={`card-ws-item-${item.id}`}>
                   <div className="ws-card-top">
                     <span className="ws-sku-tag">{item.sku}</span>
-                    <span className="ws-case-units">{activePack.units} Bags / Case</span>
+                    <span className="ws-case-units">
+                      {activePack.units} {activePack.units === 1 ? item.unitSingular : item.unitPlural} / Case
+                    </span>
                   </div>
 
                   <div
                     className="ws-card-img-wrap"
                     onClick={() => setQuickViewItem(item)}
                     style={{ cursor: 'pointer', position: 'relative' }}
-                    title="Click to view bag details & specs"
+                    title={`Click to view ${item.unitSingular} details & specs`}
                   >
                     <img
                       src={item.image}
@@ -480,7 +543,7 @@ export function WholesalePortal({ onBackToRetail }: { onBackToRetail: () => void
                       }}
                     />
                     <div className="ws-img-zoom-tag">
-                      <Eye size={11} /> <span>View Bag</span>
+                      <Eye size={11} /> <span>View {item.unitSingular === 'bag' ? 'Bag' : item.unitSingular.charAt(0).toUpperCase() + item.unitSingular.slice(1)}</span>
                     </div>
                   </div>
 
@@ -516,7 +579,7 @@ export function WholesalePortal({ onBackToRetail }: { onBackToRetail: () => void
                       <div className="ws-price-block">
                         <span className="ws-price-label">Wholesale / Case</span>
                         <span className="ws-case-price">${activePack.casePrice.toFixed(2)}</span>
-                        <span className="ws-unit-price">(${activePack.unitPrice.toFixed(2)} / bag)</span>
+                        <span className="ws-unit-price">(${activePack.unitPrice.toFixed(2)} / {item.unitSingular})</span>
                       </div>
                       <div className="ws-margin-block">
                         <span className="ws-price-label">MSRP Target</span>
@@ -531,7 +594,7 @@ export function WholesalePortal({ onBackToRetail }: { onBackToRetail: () => void
                         <span>Case Quantity:</span>
                         {currentQty > 0 ? (
                           <strong className="ws-stepper-calc">
-                            {currentQty * activePack.units} bags · ${lineTotal.toFixed(2)}
+                            {currentQty * activePack.units} {currentQty * activePack.units === 1 ? item.unitSingular : item.unitPlural} · ${lineTotal.toFixed(2)}
                           </strong>
                         ) : null}
                       </div>
@@ -602,10 +665,10 @@ export function WholesalePortal({ onBackToRetail }: { onBackToRetail: () => void
             className="ws-modal"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
-            aria-label="Product Bag Specifications"
+            aria-label="Product Specifications"
           >
             <div className="ws-modal-head">
-              <h3>Bag Specifications & Packaging</h3>
+              <h3>{quickViewItem.unitSingular === 'bag' ? 'Bag' : quickViewItem.unitSingular.charAt(0).toUpperCase() + quickViewItem.unitSingular.slice(1)} Specifications & Packaging</h3>
               <button
                 type="button"
                 className="ws-modal-close"
@@ -644,7 +707,7 @@ export function WholesalePortal({ onBackToRetail }: { onBackToRetail: () => void
                       <span>UPC Barcode:</span> <code>{quickViewItem.barcode}</code>
                     </div>
                     <div className="ws-qv-spec-item">
-                      <span>Suggested MSRP:</span> <strong>${quickViewItem.suggestedMSRP.toFixed(2)}</strong>
+                      <span>Suggested MSRP:</span> <strong>${quickViewItem.suggestedMSRP.toFixed(2)} / {quickViewItem.unitSingular}</strong>
                     </div>
                   </div>
 
@@ -810,7 +873,7 @@ export function WholesalePortal({ onBackToRetail }: { onBackToRetail: () => void
               <div className="ws-tier-discount">Base Wholesale Price</div>
               <ul className="ws-tier-perks">
                 <li>✓ Standard Wholesale Pricing (~51% Margin)</li>
-                <li>✓ Mixed SKU allowed across all 175 bags</li>
+                <li>✓ Mixed SKU allowed across all wholesale catalog items</li>
                 <li>✓ 24-48h Ground or LTL freight dispatch</li>
               </ul>
             </div>
@@ -1009,7 +1072,7 @@ export function WholesalePortal({ onBackToRetail }: { onBackToRetail: () => void
               <div>
                 <h2>Commercial Purchase Order</h2>
                 <span className="ws-drawer-sub">
-                  {totalCases} Master Cases · {totalUnits} Total Retail Bags
+                  {totalCases} Master Cases · {totalUnits} Total Retail Units
                 </span>
               </div>
               <button
@@ -1070,7 +1133,7 @@ export function WholesalePortal({ onBackToRetail }: { onBackToRetail: () => void
                           <div className="ws-po-item-info">
                             <div className="ws-po-item-title">{item.name}</div>
                             <div className="ws-po-item-meta">
-                              <strong>{pack.name}</strong> ({cases * pack.units} bags) · ${pack.casePrice.toFixed(2)}/cs
+                              <strong>{pack.name}</strong> ({cases * pack.units} {cases * pack.units === 1 ? item.unitSingular : item.unitPlural}) · ${pack.casePrice.toFixed(2)}/cs
                             </div>
                             <div className="ws-po-item-subtotal">
                               <strong>${lineTotal.toFixed(2)}</strong>
@@ -1184,7 +1247,7 @@ export function WholesalePortal({ onBackToRetail }: { onBackToRetail: () => void
                       </div>
                       <div className="ws-po-row">
                         <span>Total Retail Units:</span>
-                        <strong>{totalUnits} Bags</strong>
+                        <strong>{totalUnits} Units</strong>
                       </div>
                       <div className="ws-po-row">
                         <span>Estimated Retail Value:</span>
@@ -1200,15 +1263,9 @@ export function WholesalePortal({ onBackToRetail }: { onBackToRetail: () => void
                       </div>
                     </div>
 
-                    {!minOrderMet ? (
-                      <div className="ws-po-moq-warning">
-                        ⚠️ Minimum Order Quantity is $350. Please add ${(350 - subtotal).toFixed(2)} more to place order.
-                      </div>
-                    ) : null}
-
                     <button
                       type="submit"
-                      disabled={!minOrderMet}
+                      disabled={totalCases === 0}
                       className="ws-btn-primary ws-po-submit-btn"
                       data-testid="button-submit-po"
                     >

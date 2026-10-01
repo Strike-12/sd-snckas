@@ -16,11 +16,23 @@ export interface ShopifyShippingAddress {
   country: string;
 }
 
+export type ShopifyPaymentMethodType =
+  | 'card'
+  | 'shoppay'
+  | 'applepay'
+  | 'googlepay'
+  | 'paypal'
+  | 'klarna'
+  | 'afterpay'
+  | 'affirm'
+  | 'manual';
+
 export interface ShopifyPaymentDetails {
-  method: 'card' | 'shoppay' | 'applepay' | 'googlepay';
+  method: ShopifyPaymentMethodType;
   cardBrand?: string;
   cardLast4?: string;
   transactionId: string;
+  bnplDescription?: string;
 }
 
 export interface ShopifyOrderLineItem {
@@ -151,9 +163,10 @@ export async function processInAppShopifyOrder(params: {
   discountCode?: string;
   discountAmount?: number;
   paymentDetails: {
-    method: 'card' | 'shoppay' | 'applepay' | 'googlepay';
+    method: ShopifyPaymentMethodType;
     cardNumber?: string;
     cardBrand?: string;
+    bnplDescription?: string;
   };
 }): Promise<ShopifyOrderRecord> {
   const config = getShopifyConfig();
@@ -181,8 +194,8 @@ export async function processInAppShopifyOrder(params: {
   const subtotal = lineItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
   const discount = params.discountAmount || 0;
   const taxableSubtotal = Math.max(0, subtotal - discount);
-  // Standard California snack state/county sales tax ~7.75%
-  const tax = Number((taxableSubtotal * 0.0775).toFixed(2));
+  // Sales tax removed per store policy (Tax Exempt / $0.00)
+  const tax = 0;
   const shippingTotal = params.shippingMethod.price;
   const total = Number((taxableSubtotal + tax + shippingTotal).toFixed(2));
 
@@ -210,6 +223,7 @@ export async function processInAppShopifyOrder(params: {
       cardBrand,
       cardLast4,
       transactionId,
+      bnplDescription: params.paymentDetails.bnplDescription,
     },
     financialStatus: 'paid',
     fulfillmentStatus: 'unfulfilled',

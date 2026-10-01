@@ -96,7 +96,7 @@ function Header({
             }}
             data-testid="link-announcement-wholesale"
           >
-            Need Cases? Open Wholesale Portal (MOQ $350) →
+            Need Cases? Open Wholesale Portal (No Minimums) →
           </button>
           <span style={{ opacity: 0.5 }}>·</span>
           <button
@@ -183,14 +183,14 @@ function Header({
                 className="wholesale-switch-btn"
                 onClick={() => onSwitchView('wholesale')}
                 data-testid="button-header-wholesale-portal"
-                title="Commercial Store Buyers & Distributors (MOQ $350+)"
+                title="Commercial Store Buyers & Wholesale Cases (No Minimums)"
               >
                 <div className="ws-switch-icon-wrap">
                   <Building2 size={13} />
                 </div>
                 <div className="ws-switch-copy">
                   <span className="ws-switch-main">Wholesale & B2B</span>
-                  <span className="ws-switch-sub">Stores · Pallets · MOQ $350</span>
+                  <span className="ws-switch-sub">Stores · Cases · No Minimums</span>
                 </div>
               </button>
 
@@ -240,7 +240,7 @@ function Header({
                 </div>
                 <div className="ws-switch-copy">
                   <span className="ws-switch-main">Wholesale Portal</span>
-                  <span className="ws-switch-sub">Stores & Pallets · MOQ $350</span>
+                  <span className="ws-switch-sub">Stores & Cases · No Minimums</span>
                 </div>
               </button>
 
@@ -328,7 +328,7 @@ function CartDrawer({
           <h2>
             Your cart{' '}
             <span style={{ color: '#7a8581', fontSize: 14, fontFamily: 'var(--app-font-sans)' }}>
-              ({lines.reduce((n, line) => n + line.quantity, 0)} bags)
+              ({lines.reduce((n, line) => n + line.quantity, 0)} {lines.reduce((n, line) => n + line.quantity, 0) === 1 ? 'item' : 'items'})
             </span>
           </h2>
           <button className="icon-btn" type="button" onClick={onClose} aria-label="Close cart" data-testid="button-close-cart">
@@ -339,7 +339,7 @@ function CartDrawer({
         {/* Single Unit Retail Reassurance */}
         <div style={{ background: '#ecfdf5', borderBottom: '1px solid #a7f3d0', padding: '8px 16px', fontSize: 12, color: '#065f46', display: 'flex', alignItems: 'center', gap: 6 }}>
           <span>🛍️</span>
-          <span><strong>Single Unit Retail:</strong> Every item is packaged as 1 single bag.</span>
+          <span><strong>Single Unit Retail:</strong> All products are sold as individual single units.</span>
         </div>
 
         <div className="drawer-items">
@@ -356,7 +356,7 @@ function CartDrawer({
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '2px 0 4px', flexWrap: 'wrap' }}>
                     <span style={{ fontWeight: 700, color: '#0f172a' }}>{line.price}</span>
                     <span className="single-unit-badge" style={{ fontSize: 10, padding: '1px 6px' }}>
-                      1 Bag
+                      {getProductPackaging(line).badgeLabel}
                     </span>
                     <a
                       href={`https://www.sdsnackz.com/products/${line.handle}`}
@@ -408,7 +408,7 @@ function CartDrawer({
               <div>
                 <span>Subtotal</span>
                 <span style={{ display: 'block', fontSize: 11, color: '#64748b', fontWeight: 400 }}>
-                  ({lines.reduce((n, l) => n + l.quantity, 0)} single bags)
+                  ({lines.reduce((n, l) => n + l.quantity, 0)} {lines.reduce((n, l) => n + l.quantity, 0) === 1 ? 'single item' : 'single items'})
                 </span>
               </div>
               <span data-testid="text-cart-subtotal">${subtotal.toFixed(2)}</span>
@@ -488,6 +488,257 @@ function CartDrawer({
   );
 }
 
+export function getProductPackaging(product: { name: string; vendor?: string; categorySlug?: string }): {
+  unitSingular: string;
+  unitPlural: string;
+  badgeLabel: string;
+  priceNote: string;
+  addBtnLabel: string;
+  caseCount: string;
+  wholesaleCaseNote: string;
+} {
+  const name = product.name.toLowerCase();
+  const vendor = (product.vendor || '').toLowerCase();
+  const slug = (product.categorySlug || '').toLowerCase();
+
+  // 1. Kinder Bueno & Chocolate Bars (70wholesale: 20 pieces per display box at $25.00)
+  if (
+    name.includes('bueno') ||
+    (name.includes('kinder') && !name.includes('joy')) ||
+    name.includes('dubaco') ||
+    name.includes('pistachio milk chocolate') ||
+    (slug === 'chocolate' && !name.includes('biscuits') && !name.includes('joy'))
+  ) {
+    return {
+      unitSingular: 'bar',
+      unitPlural: 'bars',
+      badgeLabel: '1 Chocolate Bar',
+      priceNote: 'Price is for 1 bar',
+      addBtnLabel: 'Add 1 Bar',
+      caseCount: '20 pieces/box',
+      wholesaleCaseNote: 'Need a 20-piece display box ($25.00/box)?',
+    };
+  }
+
+  // 2. Kinder Joy Chocolates (70wholesale: 16 pieces per box at $30.00)
+  if (name.includes('kinder joy')) {
+    return {
+      unitSingular: 'piece',
+      unitPlural: 'pieces',
+      badgeLabel: '1 Chocolate Egg',
+      priceNote: 'Price is for 1 piece',
+      addBtnLabel: 'Add 1 Piece',
+      caseCount: '16 pieces/box',
+      wholesaleCaseNote: 'Need a 16-piece display box ($30.00/box)?',
+    };
+  }
+
+  // 3. The Complete Cookie (Lenny & Larry's 4oz) (70wholesale: 12 cookies per box at $23.50)
+  if (name.includes('cookie') || vendor.includes('complete cookie')) {
+    return {
+      unitSingular: 'cookie',
+      unitPlural: 'cookies',
+      badgeLabel: '1 Cookie',
+      priceNote: 'Price is for 1 cookie',
+      addBtnLabel: 'Add 1 Cookie',
+      caseCount: '12 cookies/box',
+      wholesaleCaseNote: 'Need a 12-cookie display box ($23.50/box)?',
+    };
+  }
+
+  // 4. Legendary Foods Protein Pastries (70wholesale: 10 pastries per box at $29.99)
+  if (name.includes('pastry') || name.includes('legendary') || vendor.includes('legendary')) {
+    return {
+      unitSingular: 'pastry',
+      unitPlural: 'pastries',
+      badgeLabel: '1 Pastry',
+      priceNote: 'Price is for 1 pastry',
+      addBtnLabel: 'Add 1 Pastry',
+      caseCount: '10 pastries/box',
+      wholesaleCaseNote: 'Need a 10-pastry display box ($29.99/box)?',
+    };
+  }
+
+  // 5. Barebells Protein Bars (70wholesale: 12 bars per box at $27.50)
+  if (name.includes('barebells') || vendor.includes('barebells')) {
+    return {
+      unitSingular: 'bar',
+      unitPlural: 'bars',
+      badgeLabel: '1 Protein Bar',
+      priceNote: 'Price is for 1 bar',
+      addBtnLabel: 'Add 1 Bar',
+      caseCount: '12 bars/box',
+      wholesaleCaseNote: 'Need a 12-bar display box ($27.50/box)?',
+    };
+  }
+
+  // 6. Takis Crisps & Pringles (15 cans / case for Takis, 12 cans / case for Pringles)
+  if (name.includes('crisp') || name.includes('can') || name.includes('pringles') || vendor.includes('pringles')) {
+    const count = name.includes('takis') ? '15 cans/case' : '12 cans/case';
+    return {
+      unitSingular: 'can',
+      unitPlural: 'cans',
+      badgeLabel: '1 Can',
+      priceNote: 'Price is for 1 can',
+      addBtnLabel: 'Add 1 Can',
+      caseCount: count,
+      wholesaleCaseNote: `Need bulk cases (${count})?`,
+    };
+  }
+
+  // 7. Micheladas El Gordo Cups & Cubanito Mix (70wholesale: 24 cups per case at $72.00)
+  if (name.includes('cup') && (name.includes('michelada') || name.includes('el gordo') || name.includes('cubanito'))) {
+    return {
+      unitSingular: 'cup',
+      unitPlural: 'cups',
+      badgeLabel: '1 Michelada Cup',
+      priceNote: 'Price is for 1 cup',
+      addBtnLabel: 'Add 1 Cup',
+      caseCount: '24 cups/case',
+      wholesaleCaseNote: 'Need a 24-cup master case ($72.00/case)?',
+    };
+  }
+
+  // 8. Pulparindo & Michelada Rim Dips (70wholesale: 12 tubs per case at $42.00)
+  if (name.includes('rim dip') || name.includes('rimming dip') || name.includes('dip')) {
+    return {
+      unitSingular: 'tub',
+      unitPlural: 'tubs',
+      badgeLabel: '1 Rim Dip Tub',
+      priceNote: 'Price is for 1 tub',
+      addBtnLabel: 'Add 1 Tub',
+      caseCount: '12 tubs/case',
+      wholesaleCaseNote: 'Need a 12-tub master case ($42.00/case)?',
+    };
+  }
+
+  // 9. De La Rosa Squeeze Paste & Michelada Mix Bottles (70wholesale: 6–12 bottles/case)
+  if (name.includes('squeeze') || name.includes('bottle') || name.includes('paste')) {
+    return {
+      unitSingular: 'bottle',
+      unitPlural: 'bottles',
+      badgeLabel: '1 Bottle',
+      priceNote: 'Price is for 1 bottle',
+      addBtnLabel: 'Add 1 Bottle',
+      caseCount: '6–12 bottles/case',
+      wholesaleCaseNote: 'Need bulk cases (6–12 bottles)?',
+    };
+  }
+
+  // 10. Hola Saladitos (70wholesale: 10 packs per box at $12.50)
+  if (name.includes('saladito') || vendor.includes('saladito')) {
+    return {
+      unitSingular: 'pack',
+      unitPlural: 'packs',
+      badgeLabel: '1 Pack',
+      priceNote: 'Price is for 1 pack',
+      addBtnLabel: 'Add 1 Pack',
+      caseCount: '10 packs/box',
+      wholesaleCaseNote: 'Need a 10-pack display box ($12.50/box)?',
+    };
+  }
+
+  // 11. Sour Strips (Trays vs Bites)
+  if (slug === 'sour-strips' || name.includes('sour strips')) {
+    if (name.includes('bites')) {
+      return {
+        unitSingular: 'bag',
+        unitPlural: 'bags',
+        badgeLabel: '1 Pouch Bag',
+        priceNote: 'Price is for 1 bag',
+        addBtnLabel: 'Add 1 Bag',
+        caseCount: '10 bags/case',
+        wholesaleCaseNote: 'Need a 10-bag retail case ($31.00/case)?',
+      };
+    }
+    return {
+      unitSingular: 'pack',
+      unitPlural: 'packs',
+      badgeLabel: '1 Pack',
+      priceNote: 'Price is for 1 pack',
+      addBtnLabel: 'Add 1 Pack',
+      caseCount: '12 packs/caddy',
+      wholesaleCaseNote: 'Need a 12-pack display caddy ($31.80/caddy)?',
+    };
+  }
+
+  // 12. Alien Fresh Jerky (70wholesale: 25 bags per master case at $177.50)
+  if (slug === 'alien-fresh-jerky' || name.includes('alien fresh')) {
+    return {
+      unitSingular: 'bag',
+      unitPlural: 'bags',
+      badgeLabel: '1 Jerky Bag',
+      priceNote: 'Price is for 1 bag',
+      addBtnLabel: 'Add 1 Bag',
+      caseCount: '25 bags/case',
+      wholesaleCaseNote: 'Need a 25-bag master case ($177.50/case)?',
+    };
+  }
+
+  // 13. Country Archer Jerky (70wholesale: 12 bags per full case at $54.00)
+  if (name.includes('country archer') || vendor.includes('country archer')) {
+    return {
+      unitSingular: 'bag',
+      unitPlural: 'bags',
+      badgeLabel: '1 Jerky Bag',
+      priceNote: 'Price is for 1 bag',
+      addBtnLabel: 'Add 1 Bag',
+      caseCount: '12 bags/case',
+      wholesaleCaseNote: 'Need a 12-bag full case ($54.00/case)?',
+    };
+  }
+
+  // 14. Takis 3.25 oz (70wholesale: 20 bags per case at $32.50)
+  if (name.includes('takis') && !name.includes('9.9')) {
+    return {
+      unitSingular: 'bag',
+      unitPlural: 'bags',
+      badgeLabel: '1 Bag',
+      priceNote: 'Price is for 1 bag',
+      addBtnLabel: 'Add 1 Bag',
+      caseCount: '20 bags/case',
+      wholesaleCaseNote: 'Need a 20-bag retail case ($32.50/case)?',
+    };
+  }
+
+  // 15. Sabritas Mexican Chips (70wholesale: 20 bags per case at $49.00)
+  if (slug === 'mexican-chips' || name.includes('sabritas') || vendor.includes('sabritas')) {
+    return {
+      unitSingular: 'bag',
+      unitPlural: 'bags',
+      badgeLabel: '1 Bag',
+      priceNote: 'Price is for 1 bag',
+      addBtnLabel: 'Add 1 Bag',
+      caseCount: '20 bags/case',
+      wholesaleCaseNote: 'Need a 20-bag retail case ($49.00/case)?',
+    };
+  }
+
+  // 16. Amos Peelerz (70wholesale: 12 bags full case at $33.00)
+  if (slug === 'amos-peelerz' || name.includes('peelerz')) {
+    return {
+      unitSingular: 'bag',
+      unitPlural: 'bags',
+      badgeLabel: '1 Gummy Bag',
+      priceNote: 'Price is for 1 bag',
+      addBtnLabel: 'Add 1 Bag',
+      caseCount: '12 bags/case',
+      wholesaleCaseNote: 'Need a 12-bag full case ($33.00/case)?',
+    };
+  }
+
+  // 17. Default single bag
+  return {
+    unitSingular: 'bag',
+    unitPlural: 'bags',
+    badgeLabel: '1 Single Bag',
+    priceNote: 'Price is for 1 bag',
+    addBtnLabel: 'Add 1 Bag',
+    caseCount: '12–24 bags/case',
+    wholesaleCaseNote: 'Need bulk master cases?',
+  };
+}
+
 function getProductBadge(product: Product) {
   const pName = product.name.toLowerCase();
   const pVendor = (product.vendor || '').toLowerCase();
@@ -526,6 +777,7 @@ function ProductCard({
   onQuickView: (product: Product) => void;
 }) {
   const badge = getProductBadge(product);
+  const packaging = getProductPackaging(product);
 
   return (
     <article className="product-card" data-testid={`card-product-${product.id}`}>
@@ -550,9 +802,9 @@ function ProductCard({
             (e.target as HTMLImageElement).src = '/assets/asset-01.png';
           }}
         />
-        {/* Single Bag overlay indicator */}
+        {/* Dynamic unit overlay indicator */}
         <div style={{ position: 'absolute', bottom: 8, left: 8 }}>
-          <span className="single-unit-badge">1 Single Bag</span>
+          <span className="single-unit-badge">{packaging.badgeLabel}</span>
         </div>
       </div>
       <div className="product-body">
@@ -574,7 +826,7 @@ function ProductCard({
                 <span className="compare-price">{product.compareAtPrice}</span>
               ) : null}
             </div>
-            <span className="unit-pricing-helper">Price is for 1 bag</span>
+            <span className="unit-pricing-helper">{packaging.priceNote}</span>
           </div>
           <button
             className="add-btn"
@@ -582,7 +834,7 @@ function ProductCard({
             onClick={() => onAdd(product)}
             data-testid={`button-add-${product.id}`}
           >
-            Add 1 Bag
+            {packaging.addBtnLabel}
           </button>
         </div>
       </div>
@@ -603,6 +855,7 @@ function QuickViewModal({
 }) {
   const [qty, setQty] = useState(1);
   if (!product) return null;
+  const packaging = getProductPackaging(product);
 
   return (
     <div className="quickview-backdrop" onClick={onClose} aria-label="Product quick view modal">
@@ -638,7 +891,7 @@ function QuickViewModal({
             {product.compareAtPrice ? (
               <span className="compare-price">{product.compareAtPrice}</span>
             ) : null}
-            <span style={{ fontSize: 13, color: '#047857', fontWeight: 600 }}>/ 1 Single Bag</span>
+            <span style={{ fontSize: 13, color: '#047857', fontWeight: 600 }}>/ {packaging.badgeLabel}</span>
           </div>
 
           <div
@@ -653,7 +906,7 @@ function QuickViewModal({
               lineHeight: 1.4,
             }}
           >
-            🛡️ <strong>Single Unit Guarantee:</strong> This listing is strictly for <strong>1 individual bag</strong>. Need bulk cases (12–50 bags)?{' '}
+            🛡️ <strong>Single Unit Guarantee:</strong> This listing is strictly for <strong>1 individual {packaging.unitSingular}</strong>. {packaging.wholesaleCaseNote}{' '}
             {onOpenWholesale && (
               <button
                 type="button"
@@ -672,7 +925,7 @@ function QuickViewModal({
                   fontSize: 'inherit',
                 }}
               >
-                Open Wholesale Portal
+                Go to Wholesale Portal →
               </button>
             )}
           </div>
@@ -710,7 +963,7 @@ function QuickViewModal({
               }}
               style={{ flex: 1 }}
             >
-              Add {qty} {qty === 1 ? 'Bag' : 'Bags'} to cart
+              Add {qty} {qty === 1 ? packaging.unitSingular.charAt(0).toUpperCase() + packaging.unitSingular.slice(1) : packaging.unitPlural.charAt(0).toUpperCase() + packaging.unitPlural.slice(1)} to cart
             </button>
           </div>
 
@@ -976,7 +1229,7 @@ function ChatWidget() {
 }
 
 const CRAVINGS = [
-  { id: 'all', label: 'All Cravings', icon: '⭐' },
+  { id: 'all', label: "I'm not picky", icon: '⭐' },
   { id: 'spicy', label: 'Spicy & Flamin’', icon: '🌶️' },
   { id: 'sour', label: 'Extreme Sour Strips', icon: '🍋' },
   { id: 'peelerz', label: 'Viral TikTok Peelers', icon: '🥝' },
@@ -1054,20 +1307,40 @@ function App() {
   const currentProducts = useMemo(() => {
     if (activeCraving !== 'all') {
       if (activeCraving === 'spicy') {
-        return ALL_PRODUCTS.filter(
-          (p) =>
-            p.name.toLowerCase().includes('flamin') ||
-            p.name.toLowerCase().includes('turbos') ||
-            p.name.toLowerCase().includes('dinamita') ||
-            (p.vendor && p.vendor.toLowerCase().includes('sabritas'))
-        );
+        return ALL_PRODUCTS.filter((p) => {
+          const text = `${p.name} ${p.handle} ${p.categoryName} ${p.vendor || ''} ${p.categorySlug}`.toLowerCase();
+          const keywords = [
+            'spicy',
+            'flamin',
+            'fuego',
+            'takis',
+            'tajin',
+            'chamoy',
+            'habanero',
+            'jalapeno',
+            'jalapeño',
+            'chile',
+            'chili',
+            'turbos',
+            'dinamita',
+            'sriracha',
+            'lucas',
+            'hot & spicy',
+            'hot and spicy',
+            'xtra flamin',
+          ];
+          if (keywords.some((k) => text.includes(k))) return true;
+          if (/\bhot\b/i.test(text) && !text.includes('hot cocoa') && !text.includes('shot')) return true;
+          return false;
+        });
       }
       if (activeCraving === 'sour') {
         return ALL_PRODUCTS.filter(
           (p) =>
-            p.id.includes('sour-strips') ||
             p.name.toLowerCase().includes('sour') ||
-            p.id.includes('haribo')
+            p.handle.toLowerCase().includes('sour') ||
+            p.categorySlug === 'sour-strips' ||
+            (p.vendor && p.vendor.toLowerCase().includes('haribo'))
         );
       }
       if (activeCraving === 'peelerz') {
@@ -1080,10 +1353,12 @@ function App() {
         ];
       }
       if (activeCraving === 'jerky') {
-        return [
-          ...(PRODUCTS_BY_COLLECTION['alien-fresh-jerky'] || []),
-          ...(PRODUCTS_BY_COLLECTION['old-trapper-beef-jerky'] || []),
-        ];
+        return ALL_PRODUCTS.filter(
+          (p) =>
+            p.categorySlug === 'all-beef-jerky' ||
+            p.categoryName.toLowerCase().includes('jerky') ||
+            p.name.toLowerCase().includes('jerky')
+        );
       }
       if (activeCraving === 'choc') {
         return PRODUCTS_BY_COLLECTION['chocolate'] || [];
@@ -1091,25 +1366,8 @@ function App() {
     }
 
     if (!selectedCategory) {
-      // Default: show popular featured best sellers from across categories
-      const sourStrips = (PRODUCTS_BY_COLLECTION['sour-strips'] || []).slice(0, 3);
-      const sabritas = (PRODUCTS_BY_COLLECTION['mexican-chips'] || []).slice(0, 3);
-      const snakClub = (PRODUCTS_BY_COLLECTION['snak-club'] || []).slice(0, 3);
-      const alienJerky = (PRODUCTS_BY_COLLECTION['alien-fresh-jerky'] || []).slice(0, 2);
-      const elGordo = (PRODUCTS_BY_COLLECTION['micheladas-el-gordo-candy'] || []).slice(0, 3);
-      const peelerz = (PRODUCTS_BY_COLLECTION['amos-peelerz'] || []).slice(0, 3);
-      const chocolate = (PRODUCTS_BY_COLLECTION['chocolate'] || []).slice(0, 2);
-      const haribo = (PRODUCTS_BY_COLLECTION['haribo'] || []).slice(0, 2);
-      return [
-        ...sourStrips,
-        ...sabritas,
-        ...snakClub,
-        ...alienJerky,
-        ...elGordo,
-        ...peelerz,
-        ...chocolate,
-        ...haribo,
-      ];
+      // Show all authentic products in the catalog
+      return ALL_PRODUCTS;
     }
     return PRODUCTS_BY_COLLECTION[selectedCategory] || [];
   }, [selectedCategory, activeCraving]);
@@ -1312,12 +1570,12 @@ function App() {
             <div>
               <p className="eyebrow">Stock up on good stuff</p>
               <h2 className="section-title">
-                {activeCategoryObj ? activeCategoryObj.name : 'Best sellers'}
+                {activeCategoryObj ? activeCategoryObj.name : 'All Products & Best Sellers'}
               </h2>
               <p className="section-note">
                 {activeCategoryObj
                   ? `Showing all ${currentProducts.length} authentic snacks in this collection.`
-                  : 'The snacks that disappear first. Pick a category above or choose from favorites below.'}
+                  : `Showing all ${ALL_PRODUCTS.length} authentic snacks in our catalog. Pick a brand category above or explore all snacks below.`}
               </p>
             </div>
             <a className="text-link" href="#categories" data-testid="link-view-categories">
@@ -1336,8 +1594,8 @@ function App() {
               }}
               data-testid="filter-pill-all"
             >
-              All Best Sellers
-              <span className="pill-count">Featured</span>
+              All Products & Best Sellers
+              <span className="pill-count">{ALL_PRODUCTS.length}</span>
             </button>
             {BEST_SELLER_CATEGORIES.map((cat) => (
               <button
@@ -1378,7 +1636,7 @@ function App() {
           <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 16px', marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#0f172a' }}>
               <ShieldCheck size={18} color="#047857" />
-              <span><strong>Retail Single Bag Guarantee:</strong> Every item is sold as <strong>1 individual bag</strong> (single unit). Need bulk wholesale cases (12–50 bags)? Visit our Wholesale Portal.</span>
+              <span><strong>Retail Single Unit Guarantee:</strong> Every item is sold as <strong>1 individual single unit</strong> (bag, bar, can, cookie, or cup). Looking for wholesale cases? Visit our Wholesale Portal.</span>
             </div>
             <button
               type="button"
@@ -1427,7 +1685,7 @@ function App() {
             <p className="eyebrow">For convenience stores, bodegas & grocers</p>
             <h2>Wholesale is available.</h2>
             <p>
-              Direct distributor pricing by the case or full master pallet. Fast freight & Net 30 terms. Minimum order $350.
+              Direct distributor pricing by the case or full master pallet. Fast freight & Net 30 terms. Order any quantity with no minimums.
             </p>
             <button
               className="button"
@@ -1435,7 +1693,7 @@ function App() {
               onClick={() => handleSwitchView('wholesale')}
               data-testid="link-wholesale-contact"
             >
-              Open B2B Portal (MOQ $350) <ArrowRight size={15} style={{ verticalAlign: 'middle', marginLeft: 6 }} />
+              Open B2B Portal (No Minimums) <ArrowRight size={15} style={{ verticalAlign: 'middle', marginLeft: 6 }} />
             </button>
           </article>
         </section>
@@ -1497,7 +1755,7 @@ function App() {
               }}
               data-testid="link-footer-wholesale"
             >
-              🏢 Wholesale Portal (MOQ $350)
+              🏢 Wholesale Portal (No Minimums)
             </button>
             <button
               type="button"
