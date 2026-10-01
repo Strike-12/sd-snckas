@@ -7,4 +7,4 @@ Commits created through the GitHub integration may start from the repository’s
 
 **Why:** A direct Git CLI push can also fail with invalid-credential errors even while the authorized GitHub connection works through the integration API.
 
-**How to apply:** Compare overlapping tree contents first. Publish the current tracked workspace through the authorized connection, preserve the pre-sync local state on a backup branch, fetch the new remote commit, and align the working branch to `origin/main`.
+**How to apply:** Compare overlapping tree contents first. Publish the current tracked workspace through the authorized connection and preserve the pre-sync local state. Fetch the new remote commit; if its tree matches the resolved workspace, back up that resolved merge too before aligning `main` to `origin/main`. This keeps both local history states recoverable without leaving the working branch diverged.
